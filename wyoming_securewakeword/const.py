@@ -28,8 +28,8 @@ WW_FEATURES: Final = 96
 
 CLIENT_ID_TYPE = Tuple[str, int]
 
-AUTH_THRESHOLD = 0.7
-AUTH_MODEL = np.load("./voiceauth/SGW.npy")
+AUTH_THRESHOLD = 0.78
+AUTH_MODEL = np.load("./wyoming_securewakeword/voiceauth/SGW.npy")
 
 @dataclass
 class WakeWordData:
