@@ -1,0 +1,3 @@
+include requirements.txt
+include wyoming_securewakeword/models/*.tflite
+include wyoming_securewakeword/VERSION
