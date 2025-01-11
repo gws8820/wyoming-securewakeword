@@ -34,7 +34,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 encoder = VoiceEncoder(device)
 
 dummy_audio = np.zeros(16000, dtype=np.float32)
-encoder.embed_utterance(dummy_
+encoder.embed_utterance(dummy_audio)
 
 def mels_proc(state: State):
     """Transform audio into mel spectrograms."""
