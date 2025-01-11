@@ -1,9 +1,11 @@
 import asyncio
 import logging
+import time
+import numpy as np
+import torch
 from datetime import datetime
 from typing import Dict, List, Optional, TextIO
-
-import numpy as np
+from resemblyzer import VoiceEncoder
 
 try:
     import tflite_runtime.interpreter as tflite
@@ -21,15 +23,18 @@ from .const import (
     WW_FEATURES,
     AUTH_THRESHOLD,
     AUTH_MODEL,
+    COOLDOWN_FRAMES,
 )
 from .state import ClientData, State
 
 _MS_PER_CHUNK = SAMPLES_PER_CHUNK // 16
-
 _LOGGER = logging.getLogger()
 
-from resemblyzer import VoiceEncoder
-encoder = VoiceEncoder("cpu")
+device = "cuda" if torch.cuda.is_available() else "cpu"
+encoder = VoiceEncoder(device)
+
+dummy_audio = np.zeros(16000, dtype=np.float32)
+encoder.embed_utterance(dummy_
 
 def mels_proc(state: State):
     """Transform audio into mel spectrograms."""
@@ -239,51 +244,22 @@ def embeddings_proc(state: State):
 
 # -----------------------------------------------------------------------------
 
-
-def extract_speaker_embedding(wav_data: np.ndarray, sample_rate: int = 16000) -> np.ndarray:
-    emb = encoder.embed_utterance(wav_data, sample_rate=sample_rate)
-    return emb
-
-def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
-    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
-
-def get_recent_audio_chunk(
-    client_data: ClientData,
-    sr: int = 16000,
-    chunk_seconds: float = 1.0,
-) -> np.ndarray:
-
-    needed_samples = int(sr * chunk_seconds)
+def get_audio_chunk(client_data: ClientData) -> np.ndarray:
     audio_len = len(client_data.audio)
-    if audio_len < needed_samples:
+    if audio_len < 4000:
         return client_data.audio
-    return client_data.audio[-needed_samples:]
+    return client_data.audio[-5000:-1000]
 
-
-# -----------------------------------------------------------------------------
-
-
-def ww_proc(
-    state: State,
-    ww_model_key: str,
-    ww_model_path: str,
-    loop: asyncio.AbstractEventLoop,
-):
-    """Transform embedding features to wake word probabilities (without batching)."""
+def ww_proc(state: State, ww_model_key: str, ww_model_path: str, loop: asyncio.AbstractEventLoop):
     try:
-        _LOGGER.debug("Loading %s from %s", ww_model_key, ww_model_path)
         ww_model = tflite.Interpreter(model_path=str(ww_model_path), num_threads=1)
-        ww_input = ww_model.get_input_details()[0]
-        ww_input_shape = ww_input["shape"]
-        ww_windows = ww_input_shape[1]
-        ww_input_index = ww_input["index"]
+        ww_model.allocate_tensors()
+        ww_input_index = ww_model.get_input_details()[0]["index"]
         ww_output_index = ww_model.get_output_details()[0]["index"]
-
-        # ww = [batch x window x features (96)] => [batch x probability]
-
-        client: Optional[ClientData] = None
-
+        ww_input_shape = ww_model.get_input_details()[0]["shape"]
+        ww_windows = ww_input_shape[1]
         ww_state = state.wake_words[ww_model_key]
+
         while state.is_running:
             ww_state.embeddings_ready.acquire()
             if not state.is_running:
@@ -298,29 +274,19 @@ def ww_proc(
                         client_data = client.wake_words[ww_model_key]
 
                         if client_data.ww_windows is None:
-                            # Number of feature windows needed for this model
                             client_data.ww_windows = ww_windows
 
                         if client_data.new_embeddings < ww_windows:
                             continue
 
-                        client_data.is_processing = True
                         embeddings_tensor = np.zeros(
-                            shape=(1, ww_windows, WW_FEATURES),
-                            dtype=np.float32,
+                            shape=(1, ww_windows, WW_FEATURES), dtype=np.float32
                         )
-
                         embeddings_tensor[0, :] = client_data.embeddings[
-                            -client_data.new_embeddings : len(client_data.embeddings)
-                            - client_data.new_embeddings
-                            + ww_windows
+                            -client_data.new_embeddings : len(client_data.embeddings) - client_data.new_embeddings + ww_windows
                         ]
-                        client_data.new_embeddings = max(
-                            0, client_data.new_embeddings - 1
-                        )
+                        client_data.new_embeddings = max(0, client_data.new_embeddings - 1)
                         todo_timestamps[client_id] = client_data.embeddings_timestamp
-
-                        # Shift timestamp
                         client_data.embeddings_timestamp += MS_PER_CHUNK
 
                         todo_embeddings[client_id] = embeddings_tensor
@@ -329,63 +295,74 @@ def ww_proc(
                     break
 
                 for client_id, embeddings_tensor in todo_embeddings.items():
-                    ww_model.resize_tensor_input(
-                        ww_input_index,
-                        embeddings_tensor.shape,
-                        strict=False,  # must be False for non-dynamic batch dim
-                    )
+                    ww_model.resize_tensor_input(ww_input_index, embeddings_tensor.shape, strict=False)
                     ww_model.allocate_tensors()
-
-                    # Generate probabilities
                     ww_model.set_tensor(ww_input_index, embeddings_tensor)
                     ww_model.invoke()
                     probabilities = ww_model.get_tensor(ww_output_index)
-                    probability = probabilities[0]
+                    probability = probabilities[0].item()
 
                     coros = []
                     with state.clients_lock:
                         client = state.clients.get(client_id)
                         if client is None:
                             continue
-
+                        
                         client_data = client.wake_words[ww_model_key]
 
-                        if probability.item() >= client_data.threshold:
-                            client_data.activations += 1
-
-                            if client_data.activations >= client_data.trigger_level:
-                                wav_chunk = get_recent_audio_chunk(client)
-                                speaker_model = extract_speaker_embedding(wav_chunk)
-                                similarity = cosine_similarity(speaker_model, AUTH_MODEL)
-
-                                if similarity >= AUTH_THRESHOLD:
-                                    client_data.is_detected = True
-                                    client_data.activations = 0
-
-                                    coros.append(
-                                        client.event_handler.write_event(
-                                            Detection(
-                                                name=ww_model_key,
-                                                timestamp=todo_timestamps[client_id],
-                                            ).event()
-                                        ),
-                                    )
-                                    _LOGGER.debug(
-                                        "Triggered %s (client=%s). Speaker OK! similarity=%.3f",
-                                        ww_model_key,
-                                        client_id,
-                                        similarity
-                                    )
-                                else:
-                                    _LOGGER.debug(
-                                        "WakeWord triggered, but speaker mismatch (similarity=%.3f). client=%s",
-                                        similarity,
-                                        client_id,
-                                    )
-                                    client_data.activations = 0
-
+                        if client_data.cooldown_counter > 0:
+                            _LOGGER.debug("Cooldown..")
                         else:
-                            client_data.activations = max(0, client_data.activations - 1)
+                            if probability >= client_data.threshold:
+                                if client_data.activations == 0:
+                                    client_data.start_time = time.time()
+
+                                client_data.activations += 1
+                                _LOGGER.info("WakeWord Detected")
+
+                                if client_data.activations >= client_data.trigger_level:
+                                    wav_chunk = get_audio_chunk(client)
+                                    speaker_emb = encoder.embed_utterance(wav_chunk)
+                                    similarity = np.dot(speaker_emb, AUTH_MODEL) / (np.linalg.norm(speaker_emb) * np.linalg.norm(AUTH_MODEL))
+
+                                    elapsed = time.time() - (client_data.start_time or time.time())
+
+                                    if similarity >= AUTH_THRESHOLD:
+                                        client_data.is_detected = True
+                                        client_data.activations = 0
+                                        client_data.start_time = None
+                                        client_data.cooldown_counter = COOLDOWN_FRAMES
+
+                                        coros.append(
+                                            client.event_handler.write_event(
+                                                Detection(
+                                                    name=ww_model_key,
+                                                    timestamp=todo_timestamps[client_id],
+                                                ).event()
+                                            ),
+                                        )
+                                        _LOGGER.info(
+                                            "[%.2fs] Auth Success! Similarity: %.1f%%",
+                                            elapsed,
+                                            similarity * 100
+                                        )
+                                    else:
+                                        _LOGGER.info(
+                                            "[%.2fs] Auth Failed. Similarity: %.1f%%",
+                                            elapsed,
+                                            similarity * 100
+                                        )
+                                        client_data.activations = 0
+                                        client_data.start_time = None
+                                        client_data.cooldown_counter = COOLDOWN_FRAMES
+
+                            else:
+                                client_data.activations = max(0, client_data.activations - 1)
+                                if client_data.activations == 0:
+                                    client_data.start_time = None
+
+                    if client_data.cooldown_counter > 0:
+                        client_data.cooldown_counter -= 1
 
                     for coro in coros:
                         asyncio.run_coroutine_threadsafe(coro, loop)
@@ -394,82 +371,7 @@ def ww_proc(
     except Exception as e:
         _LOGGER.exception("Unexpected error in wake word thread (%s): %s", ww_model_key, e)
         
-    #                coros = []
-    #                with state.clients_lock:
-    #                    client = state.clients.get(client_id)
-    #                    if client is None:
-    #                        # Client disconnected
-    #                        continue
-
-    #                    if state.debug_probability:
-    #                        _LOGGER.debug(
-    #                            "client=%s, wake_word=%s, probability=%s",
-    #                            client_id,
-    #                            ww_model_key,
-    #                            probability.item(),
-    #                        )
-
-    #                    prob_file: Optional[TextIO] = None
-    #                    if (state.output_dir is not None) and state.debug_probability:
-    #                        # Output chunk probabilities and detections for debugging
-    #                        prob_file = open(
-    #                            state.output_dir / f"{client_id}.txt",
-    #                            "a",
-    #                            encoding="utf-8",
-    #                        )
-    #                        print(
-    #                            _timestamp(),
-    #                            ww_model_key,
-    #                            probability.item(),
-    #                            file=prob_file,
-    #                        )
-
-    #                    client_data = client.wake_words[ww_model_key]
-    #                    if probability.item() >= client_data.threshold:
-    #                        # Increase activation
-    #                        client_data.activations += 1
-
-    #                        if client_data.activations >= client_data.trigger_level:
-    #                            client_data.is_detected = True
-    #                            client_data.activations = 0
-    #                            coros.append(
-    #                                client.event_handler.write_event(
-    #                                    Detection(
-    #                                        name=ww_model_key,
-    #                                        timestamp=todo_timestamps[client_id],
-    #                                    ).event()
-    #                                ),
-    #                            )
-    #                            _LOGGER.debug(
-    #                                "Triggered %s (client=%s)", ww_model_key, client_id
-    #                            )
-
-    #                            if prob_file is not None:
-    #                                print(
-    #                                    _timestamp(),
-    #                                    ww_model_key,
-    #                                    "detected",
-    #                                    file=prob_file,
-    #                                )
-    #                    else:
-    #                        # Down towards 0
-    #                        client_data.activations = max(
-    #                            0, client_data.activations - 1
-    #                        )
-
-    #                    # Clean up
-    #                    if prob_file is not None:
-    #                        prob_file.close()
-    #                        prob_file = None
-
-    #                # Run outside lock just to be safe
-    #                for coro in coros:
-    #                    asyncio.run_coroutine_threadsafe(coro, loop)
-
-    #                client_data.is_processing = False
-
-    #except Exception:
-    #    _LOGGER.exception("Unexpected error in wake word thread (%s)", ww_model_key)
+    
 
 
 def _timestamp() -> str:

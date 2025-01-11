@@ -2,11 +2,17 @@
 import sys
 import subprocess
 import venv
+import os
+import warnings
 from pathlib import Path
+
+warnings.filterwarnings("ignore", category=UserWarning)
 
 _DIR = Path(__file__).parent
 _PROGRAM_DIR = _DIR.parent
 _VENV_DIR = _PROGRAM_DIR / ".venv"
 
 context = venv.EnvBuilder().ensure_directories(_VENV_DIR)
-subprocess.check_call([context.env_exe, "-m", "wyoming_securewakeword"] + sys.argv[1:])
+env = os.environ.copy()
+env["PYTHONWARNINGS"] = "ignore" 
+subprocess.check_call([context.env_exe, "-m", "wyoming_securewakeword"] + sys.argv[1:], env=env)
