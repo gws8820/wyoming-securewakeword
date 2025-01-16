@@ -28,10 +28,7 @@ WW_FEATURES: Final = 96
 
 CLIENT_ID_TYPE = Tuple[str, int]
 
-AUTH_THRESHOLD = 0.7
 AUTH_MODEL = np.load("./wyoming_securewakeword/voiceauth/SGW.npy")
-
-COOLDOWN_FRAMES = 20
 
 @dataclass
 class WakeWordData:
@@ -45,10 +42,10 @@ class WakeWordData:
     ww_windows: Optional[int] = None
     is_detected: bool = False
     activations: int = 0
-    threshold: float = 1
+    wake_threshold: float = 1
+    auth_threshold: float = 1
     trigger_level: int = 1
     is_processing: bool = False
-    cooldown_counter: int = 0
 
     def reset(self) -> None:
         self.new_embeddings = 0

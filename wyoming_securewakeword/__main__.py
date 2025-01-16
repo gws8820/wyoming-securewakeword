@@ -38,10 +38,16 @@ async def main() -> None:
         help="Name or path of wake word model(s) to pre-load",
     )
     parser.add_argument(
-        "--threshold",
+        "--wake_threshold",
         type=float,
         default=0.5,
         help="Wake word model threshold (0.0-1.0, default: 0.5)",
+    )
+    parser.add_argument(
+        "--auth_threshold",
+        type=float,
+        default=0.5,
+        help="voice auth model threshold (0.0-1.0, default: 0.5)",
     )
     parser.add_argument(
         "--trigger-level",
@@ -97,7 +103,8 @@ async def main() -> None:
     ensure_loaded(
         state,
         args.preload_model,
-        threshold=args.threshold,
+        wake_threshold=args.wake_threshold,
+        auth_threshold=args.auth_threshold,
         trigger_level=args.trigger_level,
     )
 

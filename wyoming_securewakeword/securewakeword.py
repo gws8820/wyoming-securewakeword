@@ -21,9 +21,7 @@ from .const import (
     NUM_MELS,
     SAMPLES_PER_CHUNK,
     WW_FEATURES,
-    AUTH_THRESHOLD,
     AUTH_MODEL,
-    COOLDOWN_FRAMES,
 )
 from .state import ClientData, State
 
@@ -309,60 +307,43 @@ def ww_proc(state: State, ww_model_key: str, ww_model_path: str, loop: asyncio.A
                             continue
                         
                         client_data = client.wake_words[ww_model_key]
+                        if probability >= client_data.wake_threshold:
+                            client_data.activations += 1
+                            client_data.start_time = time.time()
+                            _LOGGER.info("WakeWord Detected")
 
-                        if client_data.cooldown_counter > 0:
-                            _LOGGER.debug("Cooldown..")
-                        else:
-                            if probability >= client_data.threshold:
-                                if client_data.activations == 0:
-                                    client_data.start_time = time.time()
+                            if client_data.activations >= client_data.trigger_level:
+                                client_data.activations = 0
+                                wav_chunk = get_audio_chunk(client)
+                                speaker_emb = encoder.embed_utterance(wav_chunk)
+                                similarity = np.dot(speaker_emb, AUTH_MODEL) / (np.linalg.norm(speaker_emb) * np.linalg.norm(AUTH_MODEL))
 
-                                client_data.activations += 1
-                                _LOGGER.info("WakeWord Detected")
-
-                                if client_data.activations >= client_data.trigger_level:
-                                    wav_chunk = get_audio_chunk(client)
-                                    speaker_emb = encoder.embed_utterance(wav_chunk)
-                                    similarity = np.dot(speaker_emb, AUTH_MODEL) / (np.linalg.norm(speaker_emb) * np.linalg.norm(AUTH_MODEL))
-
-                                    elapsed = time.time() - (client_data.start_time or time.time())
-
-                                    if similarity >= AUTH_THRESHOLD:
-                                        client_data.is_detected = True
-                                        client_data.activations = 0
-                                        client_data.start_time = None
-                                        client_data.cooldown_counter = COOLDOWN_FRAMES
-
-                                        coros.append(
-                                            client.event_handler.write_event(
-                                                Detection(
-                                                    name=ww_model_key,
-                                                    timestamp=todo_timestamps[client_id],
-                                                ).event()
-                                            ),
-                                        )
-                                        _LOGGER.info(
-                                            "[%.2fs] Auth Success! Similarity: %.1f%%",
-                                            elapsed,
-                                            similarity * 100
-                                        )
-                                    else:
-                                        _LOGGER.info(
-                                            "[%.2fs] Auth Failed. Similarity: %.1f%%",
-                                            elapsed,
-                                            similarity * 100
-                                        )
-                                        client_data.activations = 0
-                                        client_data.start_time = None
-                                        client_data.cooldown_counter = COOLDOWN_FRAMES
-
-                            else:
-                                client_data.activations = max(0, client_data.activations - 1)
-                                if client_data.activations == 0:
+                                if similarity >= client_data.auth_threshold:
+                                    client_data.is_detected = True
+                                    client_data.elapsed_time = time.time() - client_data.start_time
                                     client_data.start_time = None
 
-                    if client_data.cooldown_counter > 0:
-                        client_data.cooldown_counter -= 1
+                                    coros.append(
+                                        client.event_handler.write_event(
+                                            Detection(
+                                                name=ww_model_key,
+                                                timestamp=todo_timestamps[client_id],
+                                            ).event()
+                                        ),
+                                    )
+                                    _LOGGER.info(
+                                        "[%.2fs] Auth Success! Similarity: %.1f%%",
+                                        client_data.elapsed_time,
+                                        similarity * 100
+                                    )
+                                else:
+                                    _LOGGER.info(
+                                        "[%.2fs] Auth Failed. Similarity: %.1f%%",
+                                        client_data.elapsed_time,
+                                        similarity * 100
+                                    )
+                        else:
+                            client_data.activations = max(0, client_data.activations - 1)
 
                     for coro in coros:
                         asyncio.run_coroutine_threadsafe(coro, loop)
