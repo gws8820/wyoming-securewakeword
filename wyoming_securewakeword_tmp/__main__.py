@@ -38,17 +38,6 @@ async def main() -> None:
         help="Name or path of wake word model(s) to pre-load",
     )
     parser.add_argument(
-        "--voiceauth-dir",
-        default=_DIR / "voiceauth",
-        help="Path to directory with voiceauth models",
-    )
-    parser.add_argument(
-        "--voiceauth-model",
-        action="append",
-        default=[],
-        help="Name or path of voiceauth model(s) to pre-load",
-    )
-    parser.add_argument(
         "--wake-threshold",
         type=float,
         default=0.5,
@@ -105,8 +94,7 @@ async def main() -> None:
     # Resolve wake word model paths
     state = State(
         models_dir=Path(args.models_dir),
-        voiceauth_dir=Path(args.voiceauth_dir),
-        custom_model_dir=Path(args.custom_model_dir),
+        custom_model_dirs=[Path(d) for d in args.custom_model_dir],
         debug_probability=args.debug_probability,
         output_dir=args.output_dir,
     )
@@ -115,7 +103,6 @@ async def main() -> None:
     ensure_loaded(
         state,
         args.preload_model,
-        args.voiceauth_model,
         wake_threshold=args.wake_threshold,
         auth_threshold=args.auth_threshold,
         trigger_level=args.trigger_level,

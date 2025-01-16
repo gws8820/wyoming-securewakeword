@@ -29,6 +29,8 @@ COOLDOWN_FRAMES = 20
 
 CLIENT_ID_TYPE = Tuple[str, int]
 
+AUTH_MODEL = np.load("./wyoming_securewakeword/voiceauth/SGW.npy")
+
 @dataclass
 class WakeWordData:
     new_embeddings: int = 0

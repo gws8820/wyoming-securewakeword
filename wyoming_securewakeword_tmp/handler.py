@@ -77,7 +77,6 @@ class SecureWakeWordEventHandler(AsyncEventHandler):
                 ensure_loaded(
                     self.state,
                     detect.names,
-                    voiceauth_model=self.cli_args.voiceauth_model,
                     wake_threshold=self.cli_args.wake_threshold,
                     auth_threshold=self.cli_args.auth_threshold,
                     trigger_level=self.cli_args.trigger_level,
@@ -217,7 +216,7 @@ class SecureWakeWordEventHandler(AsyncEventHandler):
 # -----------------------------------------------------------------------------
 
 
-def ensure_loaded(state: State, names: List[str], voiceauth_model: str, wake_threshold: float, auth_threshold: float, trigger_level: int):
+def ensure_loaded(state: State, names: List[str], wake_threshold: float, auth_threshold: float, trigger_level: int):
     """Ensure wake words are loaded by name."""
     with state.clients_lock, state.ww_threads_lock:
         for model_name in names:
@@ -245,14 +244,9 @@ def ensure_loaded(state: State, names: List[str], voiceauth_model: str, wake_thr
 
             if model_path is None:
                 raise ValueError(f"Wake word model not found: {model_name}")
-            
-            voiceauth_file = _get_voiceauth_file(state)
-            if voiceauth_file is None:
-                raise ValueError(f"Voiceauth model not found: {voiceauth_model}")
 
             # Start thread for model
             model_key = model_path.stem
-            voiceauth_file = voiceauth_file
             state.wake_words[model_key] = WakeWordState()
             state.ww_threads[model_key] = Thread(
                 target=ww_proc,
@@ -261,7 +255,6 @@ def ensure_loaded(state: State, names: List[str], voiceauth_model: str, wake_thr
                     state,
                     model_key,
                     model_path,
-                    voiceauth_file,
                     asyncio.get_running_loop(),
                 ),
             )
@@ -287,7 +280,9 @@ def _get_wake_word_files(state: State) -> List[Path]:
         for p in state.models_dir.glob("*.tflite")
         if _WAKE_WORD_WITH_VERSION.match(p.stem)
     ]
-    model_paths.extend(state.custom_model_dir.glob("*.tflite"))
+
+    for custom_model_dir in state.custom_model_dirs:
+        model_paths.extend(custom_model_dir.glob("*.tflite"))
 
     return model_paths
 
@@ -296,11 +291,6 @@ def _normalize_key(model_key: str) -> str:
     """Normalize model key for comparison."""
     return model_key.lower().replace("_", " ").strip()
 
-def _get_voiceauth_file(state: State) -> List[Path]:
-    """Get available voiceauth model file."""
-    voiceauth_file = next(state.voiceauth_dir.glob("*.npy"), None)
-
-    return voiceauth_file
 
 def _get_description(file_name: str) -> str:
     """Get human-readable description of a wake word from model name."""

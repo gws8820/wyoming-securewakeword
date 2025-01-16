@@ -249,11 +249,10 @@ def get_audio_chunk(client_data: ClientData) -> np.ndarray:
         return client_data.audio
     return client_data.audio[-5000:-1000]
 
-def ww_proc(state: State, ww_model_key: str, ww_model_path: str, ww_voiceauth_file: str, loop: asyncio.AbstractEventLoop):
+def ww_proc(state: State, ww_model_key: str, ww_model_path: str, loop: asyncio.AbstractEventLoop):
     try:
         ww_model = tflite.Interpreter(model_path=str(ww_model_path), num_threads=1)
         ww_model.allocate_tensors()
-        ww_voiceauth_model = np.load(str(ww_voiceauth_file))
         ww_input_index = ww_model.get_input_details()[0]["index"]
         ww_output_index = ww_model.get_output_details()[0]["index"]
         ww_input_shape = ww_model.get_input_details()[0]["shape"]
@@ -323,7 +322,7 @@ def ww_proc(state: State, ww_model_key: str, ww_model_path: str, ww_voiceauth_fi
                                     client_data.cooldown_counter = COOLDOWN_FRAMES
                                     wav_chunk = get_audio_chunk(client)
                                     speaker_emb = encoder.embed_utterance(wav_chunk)
-                                    similarity = np.dot(speaker_emb, ww_voiceauth_model) / (np.linalg.norm(speaker_emb) * np.linalg.norm(ww_voiceauth_model))
+                                    similarity = np.dot(speaker_emb, AUTH_MODEL) / (np.linalg.norm(speaker_emb) * np.linalg.norm(AUTH_MODEL))
 
                                     if similarity >= client_data.auth_threshold:
                                         client_data.is_detected = True

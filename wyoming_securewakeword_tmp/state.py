@@ -16,13 +16,10 @@ class WakeWordState:
 class State:
     models_dir: Path
     """Directory with built-in models."""
-    
-    custom_model_dir: Path
-    """Directory with custom wake word models."""
 
-    voiceauth_dir: Path
-    """Directory with voiceauth models."""
-    
+    custom_model_dirs: List[Path] = field(default_factory=list)
+    """Directories with custom wake word models."""
+
     ww_threads: Dict[str, Thread] = field(default_factory=dict)
     ww_threads_lock: Lock = field(default_factory=Lock)
 
