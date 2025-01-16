@@ -42,8 +42,8 @@ class WakeWordData:
     ww_windows: Optional[int] = None
     is_detected: bool = False
     activations: int = 0
-    wake_threshold: float = 1
-    auth_threshold: float = 1
+    wake-threshold: float = 1
+    auth-threshold: float = 1
     trigger_level: int = 1
     is_processing: bool = False
 
