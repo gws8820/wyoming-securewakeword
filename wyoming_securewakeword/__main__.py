@@ -103,8 +103,8 @@ async def main() -> None:
     ensure_loaded(
         state,
         args.preload_model,
-        wake-threshold=args.wake-threshold,
-        auth-threshold=args.auth-threshold,
+        wake_threshold=args.wake-threshold,
+        auth_threshold=args.auth-threshold,
         trigger_level=args.trigger_level,
     )
 

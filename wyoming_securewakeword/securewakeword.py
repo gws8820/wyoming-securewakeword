@@ -307,7 +307,7 @@ def ww_proc(state: State, ww_model_key: str, ww_model_path: str, loop: asyncio.A
                             continue
                         
                         client_data = client.wake_words[ww_model_key]
-                        if probability >= client_data.wake-threshold:
+                        if probability >= client_data.wake_threshold:
                             client_data.activations += 1
                             client_data.start_time = time.time()
                             _LOGGER.info("WakeWord Detected")
@@ -318,7 +318,7 @@ def ww_proc(state: State, ww_model_key: str, ww_model_path: str, loop: asyncio.A
                                 speaker_emb = encoder.embed_utterance(wav_chunk)
                                 similarity = np.dot(speaker_emb, AUTH_MODEL) / (np.linalg.norm(speaker_emb) * np.linalg.norm(AUTH_MODEL))
 
-                                if similarity >= client_data.auth-threshold:
+                                if similarity >= client_data.auth_threshold:
                                     client_data.is_detected = True
                                     client_data.elapsed_time = time.time() - client_data.start_time
                                     client_data.start_time = None

@@ -63,8 +63,8 @@ class SecureWakeWordEventHandler(AsyncEventHandler):
                 self.state.clients[self.client_id] = self.data
                 for ww_name in self.state.wake_words:
                     self.data.wake_words[ww_name] = WakeWordData(
-                        wake-threshold=self.cli_args.wake-threshold,
-                        auth-threshold=self.cli_args.auth-threshold,
+                        wake_threshold=self.cli_args.wake_threshold,
+                        auth_threshold=self.cli_args.auth_threshold,
                         trigger_level=self.cli_args.trigger_level,
                     )
 
@@ -77,8 +77,8 @@ class SecureWakeWordEventHandler(AsyncEventHandler):
                 ensure_loaded(
                     self.state,
                     detect.names,
-                    wake-threshold=self.cli_args.wake-threshold,
-                    auth-threshold=self.cli_args.auth-threshold,
+                    wake_threshold=self.cli_args.wake_threshold,
+                    auth_threshold=self.cli_args.auth_threshold,
                     trigger_level=self.cli_args.trigger_level,
                 )
 
@@ -216,7 +216,7 @@ class SecureWakeWordEventHandler(AsyncEventHandler):
 # -----------------------------------------------------------------------------
 
 
-def ensure_loaded(state: State, names: List[str], wake-threshold: float, auth-threshold: float, trigger_level: int):
+def ensure_loaded(state: State, names: List[str], wake_threshold: float, auth_threshold: float, trigger_level: int):
     """Ensure wake words are loaded by name."""
     with state.clients_lock, state.ww_threads_lock:
         for model_name in names:
@@ -262,8 +262,8 @@ def ensure_loaded(state: State, names: List[str], wake-threshold: float, auth-th
 
             for client_data in state.clients.values():
                 client_data.wake_words[model_key] = WakeWordData(
-                    wake-threshold=wake-threshold,
-                    auth-threshold=auth-threshold,
+                    wake_threshold=wake_threshold,
+                    auth_threshold=auth_threshold,
                     trigger_level=trigger_level,
                 )
 
