@@ -21,7 +21,6 @@ from .const import (
     NUM_MELS,
     SAMPLES_PER_CHUNK,
     WW_FEATURES,
-    AUTH_MODEL,
     COOLDOWN_FRAMES,
 )
 from .state import ClientData, State
