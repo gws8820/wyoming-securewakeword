@@ -1,14 +1,14 @@
 # Wyoming SecureWakeWord
-[Wyoming protocol](https://github.com/rhasspy/wyoming) server for the secureWakeWord.
-
+### Description
+Home Assistant service that integrates Wyoming Protocol to the SecureWakeWord.
 - Demo Video on **[Youtube](https://www.youtube.com/watch?v=F3AXUbL-i-o)**
 - Research Paper on **[arXiv](https://arxiv.org/abs/2501.12194)**
 
+### Details
+- SecureWakeword is a voice authenticable wakeword system based on [OpenWakeWord](https://github.com/dscripka/openWakeWord).
+- [Wyoming Protocol](https://github.com/rhasspy/wyoming) is a peer-to-peer protocol for voice assistants.
 
-## SecureWakeword
-A voice authenticable wakeword system based on [OpenWakeWord](https://github.com/dscripka/openWakeWord).
-
-## Train models
+## Prerequisites
 You can train and evaluate both wakeword and voiceauth models on [this repository](https://github.com/gws8820/securewakeword-model).
 
 ## Install
