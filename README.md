@@ -26,8 +26,8 @@ script/setup
 ### 1. Place Your Custom Models
 Ensure that your custom models are placed in the correct directories:
 
-- **Wakeword model files**: `wyoming-securewakeword/wyoming_securewakeword/custom_models/`
-- **Voice authentication files**: `wyoming-securewakeword/wyoming_securewakeword/voiceauth/`
+- **Wakeword model files**: `./wyoming-securewakeword/wyoming_securewakeword/custom_models/`
+- **Voice authentication files**: `./wyoming-securewakeword/wyoming_securewakeword/voiceauth/`
 
 ### 2. Start the Server
 Run the server to accept connections:
